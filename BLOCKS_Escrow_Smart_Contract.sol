@@ -79,4 +79,8 @@ contract Escrow {
 
         payable(jobs[jobId].client).transfer(jobs[jobId].amount);
 
-        jobs[jobId]. 
+        jobs[jobId].state = State.Cancelled;
+
+        emit JobCancelled(jobId);
+    }
+}
