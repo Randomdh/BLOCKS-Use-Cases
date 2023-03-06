@@ -1,0 +1,121 @@
+import React, { useState } from "react";
+import Web3 from "web3";
+import EscrowContract from "./EscrowContract.json";
+
+const web3 = new Web3(Web3.givenProvider || "http://localhost:8545");
+
+const escrowContractAddress = "0x..."; // Replace with the deployed contract address
+const escrowContract = new web3.eth.Contract(
+  EscrowContract.abi,
+  escrowContractAddress
+);
+
+function App() {
+  const [state, setState] = useState({
+    clientAddress: "",
+    freelancerAddress: "",
+    arbitratorAddress: "",
+    escrowAmount: "",
+    releaseAmount: "",
+    refundAmount: "",
+    balance: "",
+  });
+
+  async function getClientBalance() {
+    const balance = await escrowContract.methods
+      .getClientBalance()
+      .call({ from: state.clientAddress });
+    setState((prevState) => ({ ...prevState, balance }));
+  }
+
+  async function createEscrow() {
+    await escrowContract.methods
+      .createEscrow(
+        state.freelancerAddress,
+        state.arbitratorAddress,
+        state.escrowAmount
+      )
+      .send({ from: state.clientAddress });
+    setState((prevState) => ({
+      ...prevState,
+      freelancerAddress: "",
+      arbitratorAddress: "",
+      escrowAmount: "",
+    }));
+  }
+
+  async function releaseEscrow() {
+    await escrowContract.methods
+      .releaseEscrow(state.releaseAmount)
+      .send({ from: state.freelancerAddress });
+    setState((prevState) => ({ ...prevState, releaseAmount: "" }));
+  }
+
+  async function refundEscrow() {
+    await escrowContract.methods
+      .refundEscrow(state.refundAmount)
+      .send({ from: state.clientAddress });
+    setState((prevState) => ({ ...prevState, refundAmount: "" }));
+  }
+
+  return (
+    <div>
+      <h1>Escrow Contract</h1>
+      <div>
+        <label>Client Address: </label>
+        <input
+          type="text"
+          value={state.clientAddress}
+          onChange={(e) =>
+            setState((prevState) => ({
+              ...prevState,
+              clientAddress: e.target.value,
+            }))
+          }
+        />
+      </div>
+      <div>
+        <label>Freelancer Address: </label>
+        <input
+          type="text"
+          value={state.freelancerAddress}
+          onChange={(e) =>
+            setState((prevState) => ({
+              ...prevState,
+              freelancerAddress: e.target.value,
+            }))
+          }
+        />
+      </div>
+      <div>
+        <label>Arbitrator Address: </label>
+        <input
+          type="text"
+          value={state.arbitratorAddress}
+          onChange={(e) =>
+            setState((prevState) => ({
+              ...prevState,
+              arbitratorAddress: e.target.value,
+            }))
+          }
+        />
+      </div>
+      <div>
+        <label>Escrow Amount: </label>
+        <input
+          type="text"
+          value={state.escrowAmount}
+          onChange={(e) =>
+            setState((prevState) => ({
+              ...prevState,
+              escrowAmount: e.target.value,
+            }))
+          }
+        />
+      </div>
+      <button onClick={createEscrow}>Create Escrow</button>
+      <hr />
+      <div>
+        <label>Release Amount: </label>
+        <input
+          type
