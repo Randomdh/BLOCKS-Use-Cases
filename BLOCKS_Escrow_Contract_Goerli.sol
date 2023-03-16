@@ -18,11 +18,12 @@ contract Escrow {
         address arbitrator;
         uint256 amount;
         State state;
+        bool useBlocks;
     }
 
     mapping(bytes32 => Job) public jobs;
 
-    event JobCreated(bytes32 indexed jobId, address indexed client, address indexed freelancer, address arbitrator, uint256 amount);
+    event JobCreated(bytes32 indexed jobId, address indexed client, address indexed freelancer, address arbitrator, uint256 amount, bool useBlocks);
     event JobLocked(bytes32 indexed jobId);
     event JobRelease(bytes32 indexed jobId);
     event JobCancelled(bytes32 indexed jobId);
@@ -42,7 +43,7 @@ contract Escrow {
         _;
     }
 
-    function createJob(bytes32 jobId, address payable freelancer, address arbitrator) public payable {
+    function createJob(bytes32 jobId, address payable freelancer, address arbitrator, bool useBlocks) public payable {
         require(jobs[jobId].client == address(0), "Job already exists");
         require(freelancer != address(0), "Freelancer address cannot be zero");
         require(arbitrator != address(0), "Arbitrator address cannot be zero");
@@ -53,10 +54,11 @@ contract Escrow {
             freelancer: freelancer,
             arbitrator: arbitrator,
             amount: msg.value,
-            state: State.Created
+            state: State.Created,
+            useBlocks: useBlocks
         });
 
-        emit JobCreated(jobId, msg.sender, freelancer, arbitrator, msg.value);
+        emit JobCreated(jobId, msg.sender, freelancer, arbitrator, msg.value, useBlocks);
     }
 
     function lockJob(bytes32 jobId) public onlyFreelancer(jobId) {
@@ -71,7 +73,11 @@ contract Escrow {
     function releaseJob(bytes32 jobId) public onlyClient(jobId) {
         require(jobs[jobId].state == State.Locked, "Job must be in Locked state");
 
-        jobs[jobId].freelancer.transfer(jobs[jobId].amount);
+        if (jobs[jobId].useBlocks) {
+            BlocksToken(blocksTokenAddress).transfer(jobs[jobId].freelancer, jobs[jobId].amount);
+        } else {
+            jobs[jobId].freelancer.transfer(jobs[jobId].amount);
+        }
 
         jobs[jobId].state = State.Release;
 
@@ -81,7 +87,11 @@ contract Escrow {
     function cancelJob(bytes32 jobId) public onlyClient(jobId) {
         require(jobs[jobId].state == State.Created, "Job must be in Created state");
 
-        payable(jobs[jobId].client).transfer(jobs[jobId].amount);
+        if (jobs[jobId].useBlocks) {
+            BlocksToken(blocksTokenAddress).transfer(jobs[jobId].client, jobs[jobId].amount);
+        } else {
+            payable(jobs[jobId].client).transfer(jobs[jobId].amount);
+        }
 
         jobs[jobId].state = State.Cancelled;
 
