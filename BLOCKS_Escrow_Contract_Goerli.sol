@@ -2,15 +2,22 @@
 
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/utils/Counters.sol";
+
 interface BlocksToken {
     function transfer(address recipient, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
     function balanceOf(address account) external view returns (uint256);
 }
 
 contract Escrow {
+    using Counters for Counters.Counter;
+    Counters.Counter private _jobIds;
+
     address public blocksTokenAddress = 0x17f4A652Fa758002dC184529A75E00017da12048;
 
     enum State { Created, Locked, Release, Cancelled }
+    enum PaymentMethod { ETH, BLOCKS }
 
     struct Job {
         address client;
@@ -18,79 +25,87 @@ contract Escrow {
         address arbitrator;
         uint256 amount;
         State state;
-        bool useBlocks;
+        PaymentMethod paymentMethod;
     }
 
-    mapping(bytes32 => Job) public jobs;
+    mapping(uint256 => Job) public jobs;
 
-    event JobCreated(bytes32 indexed jobId, address indexed client, address indexed freelancer, address arbitrator, uint256 amount, bool useBlocks);
-    event JobLocked(bytes32 indexed jobId);
-    event JobRelease(bytes32 indexed jobId);
-    event JobCancelled(bytes32 indexed jobId);
+    event JobCreated(uint256 indexed jobId, address indexed client, address indexed freelancer, address arbitrator, uint256 amount);
+    event JobLocked(uint256 indexed jobId);
+    event JobRelease(uint256 indexed jobId);
+    event JobCancelled(uint256 indexed jobId);
 
-    modifier onlyClient(bytes32 jobId) {
+    modifier onlyClient(uint256 jobId) {
         require(msg.sender == jobs[jobId].client, "Only the client can perform this action");
         _;
     }
 
-    modifier onlyFreelancer(bytes32 jobId) {
+    modifier onlyFreelancer(uint256 jobId) {
         require(msg.sender == jobs[jobId].freelancer, "Only the freelancer can perform this action");
         _;
     }
 
-    modifier onlyArbitrator(bytes32 jobId) {
+    modifier onlyArbitrator(uint256 jobId) {
         require(msg.sender == jobs[jobId].arbitrator, "Only the arbitrator can perform this action");
         _;
     }
 
-    function createJob(bytes32 jobId, address payable freelancer, address arbitrator, bool useBlocks) public payable {
-        require(jobs[jobId].client == address(0), "Job already exists");
+    function createJob(address payable freelancer, address arbitrator, uint256 amount, PaymentMethod paymentMethod) public payable {
         require(freelancer != address(0), "Freelancer address cannot be zero");
         require(arbitrator != address(0), "Arbitrator address cannot be zero");
-        require(msg.value > 0, "Amount cannot be zero");
+        require(amount > 0, "Amount cannot be zero");
+        require(uint8(paymentMethod) <= 1, "Invalid payment method");
+
+        if (paymentMethod == PaymentMethod.ETH) {
+            require(msg.value >= amount, "Insufficient ETH sent for the job");
+        } else {
+            require(BlocksToken(blocksTokenAddress).transferFrom(msg.sender, address(this), amount), "Failed to transfer BLOCKS tokens");
+        }
+
+        _jobIds.increment();
+        uint256 jobId = _jobIds.current();
 
         jobs[jobId] = Job({
             client: msg.sender,
             freelancer: freelancer,
             arbitrator: arbitrator,
-            amount: msg.value,
+            amount: amount,
             state: State.Created,
-            useBlocks: useBlocks
+            paymentMethod: paymentMethod
         });
 
-        emit JobCreated(jobId, msg.sender, freelancer, arbitrator, msg.value, useBlocks);
+        emit JobCreated(jobId, msg.sender, freelancer, arbitrator, amount);
     }
 
-    function lockJob(bytes32 jobId) public onlyFreelancer(jobId) {
+    function lockJob(uint256 jobId) public onlyFreelancer(jobId) {
         require(jobs[jobId].state == State.Created, "Job must be in Created state");
-        require(BlocksToken(blocksTokenAddress).balanceOf(jobs[jobId].freelancer) >= jobs[jobId].amount, "Freelancer must have enough BLOCKS tokens");
 
         jobs[jobId].state = State.Locked;
 
         emit JobLocked(jobId);
     }
 
-    function releaseJob(bytes32 jobId) public onlyClient(jobId) {
+    function releaseJob(uint256 jobId) public onlyClient(jobId) {
         require(jobs[jobId].state == State.Locked, "Job must be in Locked state");
 
-        if (jobs[jobId].useBlocks) {
-            BlocksToken(blocksTokenAddress).transfer(jobs[jobId].freelancer, jobs[jobId].amount);
+        if (jobs[jobId].paymentMethod == PaymentMethod.ETH) {
+                    jobs[jobId].freelancer.transfer(jobs[jobId].amount);
         } else {
-            jobs[jobId].freelancer.transfer(jobs[jobId].amount);
-        }
-
-        jobs[jobId].state = State.Release;
-
-        emit JobRelease(jobId);
+        BlocksToken(blocksTokenAddress).transfer(jobs[jobId].freelancer, jobs[jobId].amount);
     }
 
-    function cancelJob(bytes32 jobId) public onlyClient(jobId) {
+    jobs[jobId].state = State.Release;
+
+    emit JobRelease(jobId);
+}
+
+    function cancelJob(uint256 jobId) public onlyClient(jobId) {
         require(jobs[jobId].state == State.Created, "Job must be in Created state");
 
-        if (jobs[jobId].useBlocks) {
-            BlocksToken(blocksTokenAddress).transfer(jobs[jobId].client, jobs[jobId].amount);
-        } else {
+        if (jobs[jobId].paymentMethod == PaymentMethod.ETH) {
             payable(jobs[jobId].client).transfer(jobs[jobId].amount);
+        } else {
+            BlocksToken(blocksTokenAddress).transfer(jobs[jobId].client, jobs[jobId].amount);
         }
 
         jobs[jobId].state = State.Cancelled;
