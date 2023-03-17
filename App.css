@@ -1,0 +1,59 @@
+/* src/App.css */
+
+body {
+  font-family: "Hando", sans-serif;
+  background-color: black;
+  color: white;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+h2 {
+  margin-bottom: 20px;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 auto;
+  max-width: 800px;
+  padding: 20px;
+}
+
+.section {
+  background-color: black;
+  border-radius: 4px;
+  border: 2px solid #dd2763;
+  padding: 30px;
+  margin-bottom: 30px;
+  box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);
+  width: 100%;
+}
+
+input {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+  border: 1px solid #ced4da;
+}
+
+button {
+  padding: 10px;
+  background-color: #dd2763;
+  color: #ffffff;
+  border: black 20;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: opacity 500ms ease;
+}
+
+button:hover {
+  background-color: transparent;
+  color: white;
+}
