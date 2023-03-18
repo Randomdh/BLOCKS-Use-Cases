@@ -181,7 +181,7 @@ contract Escrow is Ownable, ReentrancyGuard {
         emit BlocksTokenAddressUpdated(newBlocksTokenAddress);
     }
     
-    function tokensReceived(address operator, address from, address to, uint256 amount, bytes memory userData, bytes memory operatorData) public override {
+    function tokensReceived(address operator, address from, address to, uint256 amount, bytes memory userData, bytes memory operatorData) public {
     // Only accept tokens sent by the BLOCKS token contract
     require(msg.sender == blocksTokenAddress, "Tokens can only be received from the BLOCKS token contract");
 
