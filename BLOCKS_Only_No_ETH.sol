@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
-
-pragma solidity ^0.8.0;
+pragma solidity ^ 0.8 .0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -12,13 +11,23 @@ contract Escrow is Ownable, ReentrancyGuard {
     address public blocksTokenAddress = 0x17f4A652Fa758002dC184529A75E00017da12048;
     IERC777 public blocksToken = IERC777(blocksTokenAddress);
 
-    enum State { Created, Locked, Disputed, Release, Cancelled }
+    enum State {
+        Created,
+        Locked,
+        Disputed,
+        Release,
+        Cancelled
+    }
+    enum PaymentMethod {
+        BLOCKS
+    }
 
     struct Job {
         address client;
         address payable freelancer;
         address arbitrator;
         uint256 amount;
+        PaymentMethod paymentMethod;
         State state;
     }
 
@@ -58,14 +67,14 @@ contract Escrow is Ownable, ReentrancyGuard {
         uint256 balance = blocksToken.balanceOf(address(this));
         require(balance > 0, "No fees to withdraw");
 
-        blocksToken.send(address(this), owner(), balance, ""); // Using send to transfer BLOCKS tokens
+        blocksToken.send(owner(), balance, ""); // Using send to transfer BLOCKS tokens
     }
 
-    function generateJobId(address client, address freelancer) internal view returns (bytes32) {
+    function generateJobId(address client, address freelancer) internal view returns(bytes32) {
         return keccak256(abi.encodePacked(client, freelancer, block.timestamp));
     }
 
-    function calculateFee(uint256 amount) private view returns (uint256) {
+    function calculateFee(uint256 amount) private view returns(uint256) {
         return (amount * percentageFee) / 100;
     }
 
@@ -86,13 +95,12 @@ contract Escrow is Ownable, ReentrancyGuard {
             freelancer: freelancer,
             arbitrator: arbitrator,
             amount: amount,
+            paymentMethod: PaymentMethod.BLOCKS,
             state: State.Created
         });
 
-        jobDataMapping[jobId] = jobData;
-
         uint256 totalAmount = amount + calculateFee(amount);
-        blocksToken.send(msg.sender, address(this), totalAmount, ""); // Use the send function of the BLOCKS token to transfer the total amount
+        blocksToken.send(msg.sender, totalAmount, ""); // Use the send function of the BLOCKS token to transfer
 
         bytes memory data = abi.encode(jobData); // Encode the job data as bytes
         blocksToken.send(address(this), calculateFee(amount), data); // Use the send function of the BLOCKS token to transfer the fee with job data
@@ -111,15 +119,11 @@ contract Escrow is Ownable, ReentrancyGuard {
     function resolveDispute(bytes32 jobId, uint256 clientAmount, uint256 freelancerAmount) public onlyArbitrator(jobId) {
         require(jobs[jobId].state == State.Disputed, "Job must be in Disputed state");
         require(clientAmount >= 0 && freelancerAmount >= 0, "Amounts must be greater than or equal to zero");
-        require(clientAmount.add(freelancerAmount) == jobs[jobId].amount, "The sum of amounts must equal the job's amount");
+        require(clientAmount + freelancerAmount == jobs[jobId].amount, "The sum of amounts must equal the job's amount");
 
-        if (jobs[jobId].paymentMethod == PaymentMethod.ETH) {
-            jobs[jobId].freelancer.transfer(freelancerAmount);
-            payable(jobs[jobId].client).transfer(clientAmount);
-        } else {
-            blocksToken.send(jobs[jobId].freelancer, freelancerAmount, ""); // Use the send function of the BLOCKS token
-            blocksToken.send(jobs[jobId].client, clientAmount, ""); // Use the send function of the BLOCKS token
-        }
+
+        blocksToken.send(jobs[jobId].freelancer, freelancerAmount, ""); // Use the send function of the BLOCKS token
+        blocksToken.send(jobs[jobId].client, clientAmount, ""); // Use the send function of the BLOCKS token
 
         jobs[jobId].state = State.Release;
 
@@ -129,11 +133,7 @@ contract Escrow is Ownable, ReentrancyGuard {
     function releaseJob(bytes32 jobId) public onlyClient(jobId) {
         require(jobs[jobId].state == State.Locked, "Job must be in Locked state");
 
-        if (jobs[jobId].paymentMethod == PaymentMethod.ETH) {
-            jobs[jobId].freelancer.transfer(jobs[jobId].amount);
-        } else {
-            blocksToken.send(jobs[jobId].freelancer, jobs[jobId].amount, ""); // Use the send function of the BLOCKS token
-        }
+        blocksToken.send(jobs[jobId].freelancer, jobs[jobId].amount, ""); // Use the send function of the BLOCKS token
 
         jobs[jobId].state = State.Release;
 
@@ -143,11 +143,7 @@ contract Escrow is Ownable, ReentrancyGuard {
     function cancelJob(bytes32 jobId) public onlyClient(jobId) {
         require(jobs[jobId].state == State.Created, "Job must be in Created state");
 
-        if (jobs[jobId].paymentMethod == PaymentMethod.ETH) {
-            payable(jobs[jobId].client).transfer(jobs[jobId].amount);
-        } else {
-            blocksToken.send(jobs[jobId].client, jobs[jobId].amount, ""); // Use the send function of the BLOCKS token
-        }
+        blocksToken.send(jobs[jobId].client, jobs[jobId].amount, ""); // Use the send function of the BLOCKS token
 
         jobs[jobId].state = State.Cancelled;
 
